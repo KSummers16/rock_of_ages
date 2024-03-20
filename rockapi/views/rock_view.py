@@ -17,7 +17,7 @@ class RockView(ViewSet):
         """
 
         # Get an object instance of a rock type
-        chosen_type = Type.objects.get(pk=request.data["typeId"])
+        chosen_type = Type.objects.get(pk=request.data["type_id"])
 
         # Create a rock object and assign it property values
         rock = Rock()
@@ -40,12 +40,54 @@ class RockView(ViewSet):
         Returns:
             Response -- JSON serialized array
         """
+        # Get query string parameter
+        owner_only = self.request.query_params.get("owner", None)
+
         try:
+            # Start with all rows
             rocks = Rock.objects.all()
+
+            # If `?owner=current` is in the URL
+            if owner_only is not None and owner_only == "current":
+                # Filter to only the current user's rocks
+                rocks = rocks.filter(user=request.auth.user)
+
             serializer = RockSerializer(rocks, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as ex:
             return HttpResponseServerError(ex)
+        # try:
+        #     rocks = Rock.objects.all()
+        #     serializer = RockSerializer(rocks, many=True)
+        #     return Response(serializer.data, status=status.HTTP_200_OK)
+        # except Exception as ex:
+        #     return HttpResponseServerError(ex)
+
+    def destroy(self, request, pk=None):
+        """Handle DELETE requests for a single item
+
+        Returns:
+            Response -- 200, 404, or 500 status code
+        """
+        try:
+            void = Rock.objects.get(pk=pk)
+            # Verify that the pk of the rock owner is the same pk as the authenticated user
+            if void.user.id == request.auth.user.id:
+                void.delete()
+                return Response(None, status=status.HTTP_204_NO_CONTENT)
+            else:
+                return Response(
+                    {"message": "You do not own that rock"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        except Rock.DoesNotExist as ex:
+            return Response({"message": ex.args[0]}, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as ex:
+            return Response(
+                {"message": ex.args[0]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class RockOwnerSerializer(serializers.ModelSerializer):
